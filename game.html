@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pokémon Card Price Guessing Game</title>
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: linear-gradient(to bottom, #e6f0fa, #ffffff);
+            color: #003087;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+        header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        nav a {
+            color: #ffd700;
+            text-decoration: none;
+            font-weight: bold;
+            margin: 0 10px;
+        }
+        nav a:hover {
+            color: #003087;
+        }
+        .game-container {
+            max-width: 600px;
+            width: 100%;
+            text-align: center;
+        }
+        .stats {
+            margin: 10px 0;
+            font-size: 1.2rem;
+        }
+        .leaderboard {
+            margin: 10px 0;
+            font-size: 1rem;
+            color: #555;
+        }
+        .question-card {
+            background: white;
+            border: 2px solid #003087;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        }
+        .question-card h2 {
+            margin: 0 0 20px;
+            font-size: 1.5rem;
+        }
+        .options {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+        .option {
+            padding: 10px;
+            background: #f8f9fa;
+            border: 1px solid #003087;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        .option:hover {
+            background: #ffd700;
+            color: #003087;
+        }
+        .health-bar {
+            width: 100%;
+            height: 20px;
+            background: #ccc;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        .health {
+            height: 100%;
+            background: linear-gradient(to right, #00ff00, #ff0000);
+            transition: width 0.1s linear;
+        }
+        .result-message {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 20px;
+            border: 2px solid #003087;
+            border-radius: 8px;
+            text-align: center;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+        }
+        .result-message.show {
+            display: block;
+        }
+        canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+        }
+        button {
+            margin-top: 10px;
+            padding: 10px 20px;
+            background: #003087;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+        button:hover {
+            background: #ffd700;
+            color: #003087;
+        }
+        @media (max-width: 600px) {
+            .options {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Pokémon Card Price Guessing Game</h1>
+    </header>
+    <div class="game-container">
+        <div class="stats">
+            Score: <span id="score">0</span> | Time Left: <span id="time">60</span>s
+        </div>
+        <div class="health-bar">
+            <div class="health" id="health-bar" style="width: 100%"></div>
+        </div>
+        <div class="leaderboard">
+            High Score: <span id="high-score">0</span>
+        </div>
+        <div class="question-card" id="question-card">
+            <h2 id="question">Loading...</h2>
+            <div class="options" id="options"></div>
+        </div>
+        <div class="result-message" id="result-message">
+            <h2>Game Over!</h2>
+            <p>Your score: <span id="final-score">0</span></p>
+            <p id="feedback">Well done!</p>
+            <button onclick="startGame()">Play Again</button>
+        </div>
+    </div>
+    <canvas id="confetti"></canvas>
+    <script>
+        const cards = [
+            { name: "Base Set Charizard (PSA 10)", price: 500000 },
+            { name: "Pikachu Illustrator Promo", price: 5275000 },
+            { name: "Blastoise Base Set (PSA 10)", price: 100000 },
+            { name: "Shadowless Charizard (PSA 10)", price: 65000 },
+            { name: "Lugia Neo Genesis (PSA 10)", price: 10000 },
+            { name: "Mewtwo Base Set (PSA 10)", price: 20000 },
+            { name: "Venusaur Base Set (PSA 10)", price: 80000 }
+        ];
+        let score = 0;
+        let timeLeft = 60;
+        let timer;
+        const scoreDisplay = document.getElementById("score");
+        const timeDisplay = document.getElementById("time");
+        const healthBar = document.getElementById("health-bar");
+        const questionCard = document.getElementById("question-card");
+        const questionDisplay = document.getElementById("question");
+        const optionsDisplay = document.getElementById("options");
+        const resultMessage = document.getElementById("result-message");
+        const finalScoreDisplay = document.getElementById("final-score");
+        const feedbackDisplay = document.getElementById("feedback");
+        const highScoreDisplay = document.getElementById("high-score");
+
+        function formatPrice(price) {
+            return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(price);
+        }
+
+        function generateOptions(correctPrice) {
+            const options = [correctPrice];
+            while (options.length < 4) {
+                const variance = Math.random() * 0.5 + 0.5; // 50%-150% of correct price
+                const distractor = Math.round(correctPrice * variance);
+                if (!options.includes(distractor) && distractor > 1000) {
+                    options.push(distractor);
+                }
+            }
+            return options.sort(() => Math.random() - 0.5);
+        }
+
+        function showQuestion() {
+            const card = cards[Math.floor(Math.random() * cards.length)];
+            questionDisplay.textContent = `What is the approximate value of ${card.name}?`;
+            optionsDisplay.innerHTML = "";
+            const options = generateOptions(card.price);
+            options.forEach(price => {
+                const button = document.createElement("div");
+                button.classList.add("option");
+                button.textContent = formatPrice(price);
+                button.addEventListener("click", () => checkAnswer(price, card.price));
+                optionsDisplay.appendChild(button);
+            });
+        }
+
+        function checkAnswer(selected, correct) {
+            if (selected === correct) {
+                score += 10;
+            } else {
+                score = Math.max(0, score - 5);
+            }
+            scoreDisplay.textContent = score;
+            showQuestion();
+        }
+
+        function startGame() {
+            score = 0;
+            timeLeft = 60;
+            scoreDisplay.textContent = score;
+            timeDisplay.textContent = timeLeft;
+            healthBar.style.width = "100%";
+            resultMessage.classList.remove("show");
+            questionCard.style.display = "block";
+            clearInterval(timer);
+            timer = setInterval(() => {
+                timeLeft--;
+                timeDisplay.textContent = timeLeft;
+                healthBar.style.width = (timeLeft / 60 * 100) + "%";
+                if (timeLeft <= 0) {
+                    endGame();
+                }
+            }, 1000);
+            showQuestion();
+            const highScore = localStorage.getItem("highScore") || 0;
+            highScoreDisplay.textContent = highScore;
+        }
+
+        function endGame() {
+            clearInterval(timer);
+            questionCard.style.display = "none";
+            finalScoreDisplay.textContent = score;
+            const highScore = localStorage.getItem("highScore") || 0;
+            if (score > highScore) {
+                localStorage.setItem("highScore", score);
+                highScoreDisplay.textContent = score;
+            }
+            feedbackDisplay.textContent = score >= 50 ? "Elite Trainer!" : score >= 20 ? "Great Collector!" : "Keep Training!";
+            resultMessage.classList.add("show");
+            if (score >= 50) showConfetti();
+        }
+
+        function showConfetti() {
+            const canvas = document.getElementById("confetti");
+            const ctx = canvas.getContext("2d");
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            const particles = [];
+            for (let i = 0; i < 100; i++) {
+                particles.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height,
+                    size: Math.random() * 10 + 5,
+                    speedX: Math.random() * 6 - 3,
+                    speedY: Math.random() * 6 - 3,
+                    color: ["#ffd700", "#003087", "#ff0000", "#00ff00"][Math.floor(Math.random() * 4)]
+                });
+            }
+            function animate() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                particles.forEach(p => {
+                    ctx.fillStyle = p.color;
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                    ctx.fill();
+                    p.x += p.speedX;
+                    p.y += p.speedY;
+                    p.size *= 0.98;
+                });
+                if (particles.some(p => p.size > 1)) {
+                    requestAnimationFrame(animate);
+                }
+            }
+            animate();
+        }
+
+        startGame();
+    </script>
+</body>
+</html>
